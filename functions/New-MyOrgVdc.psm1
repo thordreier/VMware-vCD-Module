@@ -120,9 +120,25 @@
             [int] $Timeout = 120
     )
     Process {
+        ## Search given Storage Profile
+        Write-Verbose "Search given Storage Profile"
+        $ProVdcStorageProfile = search-cloud -QueryType ProviderVdcStorageProfile -Name $StorageProfile | Get-CIView
+
+        ## Create Storage Profile Object with Settings
+        Write-Verbose "Create Storage Profile Object with Settings"
+        $spParams = new-object VMware.VimAutomation.Cloud.Views.VdcStorageProfileParams
+        $spParams.Limit = $StorageLimit
+        $spParams.Units = "MB"
+        $spParams.ProviderVdcStorageProfile = $ProVdcStorageProfile.href
+        $spParams.Enabled = $true
+        $spParams.Default = $true
+
+        # Get-NetworkPool doesn't return anything!
+        $networkPoolObj = Search-Cloud -QueryType NetworkPool | Where-Object -Property Name -EQ -Value $NetworkPool
+
         ## Create Objects and all Settings
         Write-Verbose "Create Objects and all Settings"
-        $adminVdc = New-Object VMware.VimAutomation.Cloud.Views.AdminVdc
+        $adminVdc = New-Object VMware.VimAutomation.Cloud.Views.CreateVdcParams
         $adminVdc.Name = $name
         $adminVdc.IsEnabled = $Enabled
         $OrgVdcproviderVdc = Get-ProviderVdc $ProviderVDC
@@ -139,20 +155,22 @@
         $adminVdc.ComputeCapacity.Memory.Units = "MB"
         $adminVdc.ComputeCapacity.Memory.Limit = $MEMLimit
         $adminVdc.ComputeCapacity.Memory.Allocated = $MEMLimit
-        $adminVdc.StorageCapacity = New-Object VMware.VimAutomation.Cloud.Views.CapacityWithUsage
-        $adminVdc.StorageCapacity.Units = "MB"
-        $adminVdc.StorageCapacity.Limit = $StorageLimit
+        $adminVdc.VdcStorageProfile = $spParams
         $adminVdc.NetworkQuota = 10
         $adminVdc.VmQuota = 0
         $adminVdc.VCpuInMhz = 2000
-        $adminVdc.VCpuInMhz2 = 2000
         $adminVdc.UsesFastProvisioning = $false
         $adminVdc.IsThinProvision = $true
+        $adminVdc.NetworkPoolReference = New-Object VMware.VimAutomation.Cloud.Views.Reference
+        $adminVdc.NetworkPoolReference.Href = $networkPoolObj.Client.RestClient.BaseAddress.AbsoluteUri + 'admin/extension/networkPool/' + ($networkPoolObj.Id -split ':')[3]
+        $adminVdc.NetworkPoolReference.Id = $networkPoolObj.Id
+        $adminVdc.NetworkPoolReference.Name = $networkPoolObj.Name
+        $adminVdc.NetworkPoolReference.Type = 'application/vnd.vmware.admin.vmwNetworkPoolReferences+xml'
 
         ## Create Org vDC
         Write-Verbose "Create Org vDC"
         $OrgED = (Get-Org $Org).ExtensionData
-        $orgVdc = $orgED.CreateVdc($adminVdc)
+        $orgVdc = $OrgED.CreateVdcsparam($adminVdc)
 
         ## Wait for getting Ready
         Write-Verbose "Wait for OrgVdc getting Ready after creation"
@@ -165,26 +183,6 @@
             }
         Write-Progress -Activity "Creating OrgVdc" -Completed
         Start-Sleep 2
-
-        ## Search given Storage Profile
-        Write-Verbose "Search given Storage Profile"
-        $Filter = "ProviderVdc==" + $OrgVdcproviderVdc.Id
-        $ProVdcStorageProfile = search-cloud -QueryType ProviderVdcStorageProfile -Name $StorageProfile -Filter $Filter | Get-CIView
-
-        ## Create Storage Profile Object with Settings
-        Write-Verbose "Create Storage Profile Object with Settings"
-        $spParams = new-object VMware.VimAutomation.Cloud.Views.VdcStorageProfileParams
-        $spParams.Limit = $StorageLimit
-        $spParams.Units = "MB"
-        $spParams.ProviderVdcStorageProfile = $ProVdcStorageProfile.href
-        $spParams.Enabled = $true
-        $spParams.Default = $true
-        $UpdateParams = new-object VMware.VimAutomation.Cloud.Views.UpdateVdcStorageProfiles
-        $UpdateParams.AddStorageProfile = $spParams
-
-        ## Update Org vDC
-        $orgVdc = Get-OrgVdc -Name $name
-        $orgVdc.ExtensionData.CreateVdcStorageProfile($UpdateParams)
 
         ## Wait for getting Ready
         Write-Verbose "Wait for OrgVdc getting Ready after update"
@@ -202,15 +200,18 @@
         $orgvDCAnyProfile = search-cloud -querytype AdminOrgVdcStorageProfile | Where-Object {($_.Name -match '\*') -and ($_.VdcName -eq $orgVdc.Name)} | Get-CIView
 
         ## Disable Any-StorageProfile
-        Write-Verbose "Disable Any-StorageProfile"
-        $orgvDCAnyProfile.Enabled = $False
-        $return = $orgvDCAnyProfile.UpdateServerData()
+        if ($orgvDCAnyProfile)
+        {
+            Write-Verbose "Disable Any-StorageProfile"
+            $orgvDCAnyProfile.Enabled = $False
+            $return = $orgvDCAnyProfile.UpdateServerData()
 
-        ## Remove Any-StorageProfile
-        Write-Verbose "Remove Any-StorageProfile"
-        $ProfileUpdateParams = new-object VMware.VimAutomation.Cloud.Views.UpdateVdcStorageProfiles
-        $ProfileUpdateParams.RemoveStorageProfile = $orgvDCAnyProfile.href
-        $remove = $orgvdc.extensiondata.CreatevDCStorageProfile($ProfileUpdateParams)
+            ## Remove Any-StorageProfile
+            Write-Verbose "Remove Any-StorageProfile"
+            $ProfileUpdateParams = new-object VMware.VimAutomation.Cloud.Views.UpdateVdcStorageProfiles
+            $ProfileUpdateParams.RemoveStorageProfile = $orgvDCAnyProfile.href
+            $remove = $orgvdc.extensiondata.CreatevDCStorageProfile($ProfileUpdateParams)
+        }
 
          ## Wait for getting Ready
         Write-Verbose "Wait for getting Ready"
@@ -222,12 +223,6 @@
             }
         Write-Progress -Activity "Updating Org" -Completed
         Start-Sleep 1
-
-        ## Set NetworkPool for correct location
-        Write-Verbose "Set NetworkPool for correct location"
-        $orgVdc = Get-OrgVdc -Name $name
-        $ProVdcNetworkPool = Get-NetworkPool -ProviderVdc $ProviderVDC -Name $NetworkPool
-        $set = Set-OrgVdc -OrgVdc $orgVdc -NetworkPool $ProVdcNetworkPool -NetworkMaxCount "10"
 
         ## Create private Catalog
         Write-Verbose "Create private Catalog Object"
