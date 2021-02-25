@@ -91,6 +91,9 @@
         [Parameter(Mandatory=$False, ValueFromPipeline=$False, HelpMessage="CPU Limit (MHz) of the New Org VDC as String")]
         [ValidateNotNullorEmpty()]
             [int] $CPULimit = 0,
+        [Parameter(Mandatory=$False, ValueFromPipeline=$False, HelpMessage="xxx")]
+        [ValidateNotNullorEmpty()]
+            [int] $VCpuInMhz = 2000,
         [Parameter(Mandatory=$False, ValueFromPipeline=$False, HelpMessage="Memory Limit (MB) of the New Org VDC as String")]
         [ValidateNotNullorEmpty()]
             [int] $MEMLimit = 0,
@@ -100,6 +103,9 @@
         [Parameter(Mandatory=$True, ValueFromPipeline=$False, HelpMessage="Storage Profile of the New Org VDC as String")]
         [ValidateNotNullorEmpty()]
             [String] $StorageProfile,
+        [Parameter(Mandatory=$False, ValueFromPipeline=$False, HelpMessage="xxx")]
+        [ValidateNotNullorEmpty()]
+            [bool] $IsThinProvision = $True,
         [Parameter(Mandatory=$True, ValueFromPipeline=$False, HelpMessage="Network Pool of the New Org VDC as String")]
         [ValidateNotNullorEmpty()]
             [String] $NetworkPool,
@@ -158,9 +164,9 @@
         $adminVdc.VdcStorageProfile = $spParams
         $adminVdc.NetworkQuota = 10
         $adminVdc.VmQuota = 0
-        $adminVdc.VCpuInMhz = 2000
+        $adminVdc.VCpuInMhz = $VCpuInMhz
         $adminVdc.UsesFastProvisioning = $false
-        $adminVdc.IsThinProvision = $true
+        $adminVdc.IsThinProvision = $IsThinProvision
         $adminVdc.NetworkPoolReference = New-Object VMware.VimAutomation.Cloud.Views.Reference
         $adminVdc.NetworkPoolReference.Href = $networkPoolObj.Client.RestClient.BaseAddress.AbsoluteUri + 'admin/extension/networkPool/' + ($networkPoolObj.Id -split ':')[3]
         $adminVdc.NetworkPoolReference.Id = $networkPoolObj.Id
