@@ -128,7 +128,14 @@
     Process {
         ## Search given Storage Profile
         Write-Verbose "Search given Storage Profile"
-        $ProVdcStorageProfile = search-cloud -QueryType ProviderVdcStorageProfile -Name $StorageProfile | Get-CIView
+        if ($StorageProfile -match '^urn:vcloud:providervdcstorageprofile:')
+        {
+            $ProVdcStorageProfile = Search-Cloud -QueryType ProviderVdcStorageProfile -Filter "id==$StorageProfile" | Get-CIView
+        }
+        else
+        {
+            $ProVdcStorageProfile = Search-Cloud -QueryType ProviderVdcStorageProfile -Name $StorageProfile | Get-CIView
+        }
 
         ## Create Storage Profile Object with Settings
         Write-Verbose "Create Storage Profile Object with Settings"
